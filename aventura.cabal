@@ -1,0 +1,53 @@
+cabal-version:      2.4
+name:               aventura
+version:            0.1.0.0
+synopsis:           Motor de aventuras de texto en Haskell (CI-3661)
+description:        Proyecto 1 de Laboratorio de Lenguajes de Programacion I (Sep-Dic 2026).
+                    Universidad Simon Bolivar.
+author:             Stefano Casale (19-10114) y Nazareth Colmenarez (20-10017)
+maintainer:         19-10114@usb.ve, 20-10017@usb.ve
+category:           Game
+build-type:         Simple
+
+library
+    exposed-modules:
+        Motor.Tipos
+        Motor.Reconocedor
+        Motor.Mundo
+        Motor.Comandos
+        Motor.Nucleo
+        Motor.Persistencia
+    hs-source-dirs:   src
+    default-language: Haskell2010
+    build-depends:
+        base >= 4.14 && < 5,
+        containers >= 0.6,
+        directory >= 1.3,
+        filepath >= 1.4
+    ghc-options:      -Wall -Wcompat
+
+executable aventura
+    main-is:          Main.hs
+    hs-source-dirs:   app
+    default-language: Haskell2010
+    build-depends:
+        base >= 4.14 && < 5,
+        containers >= 0.6,
+        directory >= 1.3,
+        filepath >= 1.4,
+        aventura
+    ghc-options:      -Wall -Wcompat
+
+test-suite aventura-test
+    type:             exitcode-stdio-1.0
+    main-is:          Spec.hs
+    hs-source-dirs:   test
+    default-language: Haskell2010
+    build-depends:
+        base >= 4.14 && < 5,
+        containers >= 0.6,
+        directory >= 1.3,
+        filepath >= 1.4,
+        HUnit >= 1.6,
+        aventura
+    ghc-options:      -Wall -Wcompat
