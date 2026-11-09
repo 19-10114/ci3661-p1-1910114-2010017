@@ -9,8 +9,9 @@ según Plan_Trabajo_Nazareth.pdf.
 module Motor.Reconocedor where
 
 import Control.Applicative (Alternative (..))
-import Data.Char (isSpace)
+import Data.Char (isAsciiLower, isDigit, isSpace)
 import Data.List (stripPrefix)
+import Data.Maybe (listToMaybe)
 
 newtype Parser a = Parser { runParser :: ReadS a }
 
@@ -60,3 +61,16 @@ instance Alternative Parser where
 
   Parser primero <|> Parser segundo = Parser $ \entrada ->
     take 1 (primero entrada ++ segundo entrada)
+
+identificador :: Parser String
+identificador = some (satisfy caracterDeIdentificador)
+  where
+    caracterDeIdentificador c =
+      isAsciiLower c || isDigit c || c == '_' || c `elem` "áéíóúñü"
+
+reconocerCompleto :: Parser a -> String -> Maybe a
+reconocerCompleto parser entrada =
+  listToMaybe [valor | (valor, "") <- runParser parser entrada]
+
+separadorBloque :: Parser String
+separadorBloque = espacios *> string "---" <* espacios
