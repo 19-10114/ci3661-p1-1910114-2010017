@@ -1,0 +1,6 @@
+# V1: META mal formada y falta DESC en el bloque de la sala.
+MUNDO: Cuarto sin descripción
+INICIO: cuarto
+META: llegar cuarto
+---
+SALA: cuarto

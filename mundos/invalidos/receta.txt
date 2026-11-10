@@ -1,0 +1,20 @@
+# V7: palo colocado dos veces. V9: bodega inalcanzable.
+# V10: gancho no conseguible. Variante 3: alambre sin definir en la receta.
+MUNDO: Taller incompleto
+INICIO: taller
+META: llevar gancho a taller
+RECETA: palo + alambre -> gancho
+---
+OBJETO: palo
+DESC: Un palo.
+---
+OBJETO: gancho
+DESC: Un gancho.
+---
+SALA: taller
+DESC: Un taller.
+OBJETO: palo
+OBJETO: palo
+---
+SALA: bodega
+DESC: Una bodega sin conexión con el taller.

@@ -1,0 +1,17 @@
+# V2: moneda duplicada. V3: patio inexistente. V4: llave inexistente.
+# V5: dos salidas al norte. V6: escudo sin definir.
+MUNDO: Cuarto con referencias rotas
+INICIO: cuarto
+META: llegar a cuarto
+---
+OBJETO: moneda
+DESC: Una moneda.
+---
+OBJETO: moneda
+DESC: Otra moneda.
+---
+SALA: cuarto
+DESC: Un cuarto.
+SALIDA: norte -> patio
+SALIDA: norte -> cuarto requiere llave
+OBJETO: escudo
