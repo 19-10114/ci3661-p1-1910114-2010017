@@ -1,10 +1,12 @@
 module Main where
 
-import Motor.Comandos
+import Motor.Comandos (leerComando)
+import Motor.Mundo (leerMundo)
+import Motor.Reconocedor (identificador, reconocerCompleto, runParser, separadorBloque)
 import Motor.Tipos
 import Test.HUnit
 
--- | Casos de prueba para 'leerComando'
+-- | Casos de prueba para 'leerComando'.
 testsComandos :: Test
 testsComandos = TestList
   [ -- Movimiento canónico con "ir"
@@ -15,7 +17,7 @@ testsComandos = TestList
   , TestCase (assertEqual "ir arriba" (Just (Ir Arriba)) (leerComando "ir arriba"))
   , TestCase (assertEqual "ir abajo" (Just (Ir Abajo)) (leerComando "ir abajo"))
 
-    -- Movimiento directo (sinónimo sin "ir", crítico para guiones/entrega.txt)
+    -- Movimiento directo y abreviaturas
   , TestCase (assertEqual "norte directo" (Just (Ir Norte)) (leerComando "norte"))
   , TestCase (assertEqual "oeste directo" (Just (Ir Oeste)) (leerComando "oeste"))
   , TestCase (assertEqual "arriba directo" (Just (Ir Arriba)) (leerComando "arriba"))
@@ -72,9 +74,73 @@ testsComandos = TestList
   , TestCase (assertEqual "palabra desconocida" Nothing (leerComando "saltar"))
   ]
 
+testsReconocedor :: Test
+testsReconocedor = TestList
+  [ TestCase $
+      assertEqual "el identificador deja el resto sin consumir"
+        [("sala_2", " -> patio")]
+        (runParser identificador "sala_2 -> patio")
+  , TestCase $
+      assertEqual "identificador con letras españolas"
+        (Just "cañón_2")
+        (reconocerCompleto identificador "cañón_2")
+  , TestCase $
+      assertEqual "identificador con guion inválido"
+        Nothing
+        (reconocerCompleto identificador "sala-2")
+  , TestCase $
+      assertEqual "separador con espacios"
+        (Just "---")
+        (reconocerCompleto separadorBloque "  ---  ")
+  , TestCase $
+      assertEqual "separador con texto sobrante"
+        Nothing
+        (reconocerCompleto separadorBloque "--- extra")
+  ]
+
+testsMundos :: Test
+testsMundos = TestList
+  [ TestCase $
+      assertEqual "mundo válido con un objeto de meta obtenido por receta"
+        (Right "Taller")
+        (fmap mundoTitulo (leerMundo mundoConReceta))
+  , mundoInvalido "mundos/invalidos/sintaxis.txt" 2
+  , mundoInvalido "mundos/invalidos/referencias.txt" 5
+  , mundoInvalido "mundos/invalidos/receta.txt" 4
+  ]
+
+mundoInvalido :: FilePath -> Int -> Test
+mundoInvalido archivo esperados = TestLabel archivo $ TestCase $ do
+  texto <- readFile archivo
+  case leerMundo texto of
+    Left errores -> assertEqual "cantidad de errores" esperados (length errores)
+    Right _ -> assertFailure "Se aceptó un mundo que debía ser inválido"
+
+mundoConReceta :: String
+mundoConReceta = unlines
+  [ "MUNDO: Taller"
+  , "INICIO: taller"
+  , "META: llevar gancho a taller"
+  , "RECETA: palo + cuerda -> gancho"
+  , "---"
+  , "OBJETO: palo"
+  , "DESC: Un palo."
+  , "---"
+  , "OBJETO: cuerda"
+  , "DESC: Una cuerda."
+  , "---"
+  , "OBJETO: gancho"
+  , "DESC: Un gancho."
+  , "---"
+  , "SALA: taller"
+  , "DESC: Un taller."
+  , "OBJETO: palo"
+  , "OBJETO: cuerda"
+  ]
+
 main :: IO ()
 main = do
-  resultado <- runTestTT testsComandos
+  resultado <- runTestTT (TestList [testsComandos, testsReconocedor, testsMundos])
   if errors resultado + failures resultado == 0
     then return ()
     else error "Pruebas unitarias fallaron"
