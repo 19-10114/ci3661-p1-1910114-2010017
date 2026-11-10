@@ -35,8 +35,61 @@ data BloqueCrudo
 data MundoCrudo = MundoCrudo Cabecera [BloqueCrudo]
 
 leerMundo :: String -> Either [ErrorMundo] Mundo
-leerMundo texto =
-  validacionAEither (construirMundo <$> parsearMundoCrudo (zip [1 ..] (lines texto)))
+leerMundo texto = do
+  crudo <- validacionAEither (parsearMundoCrudo (zip [1 ..] (lines texto)))
+  validacionAEither (validarV2aV6 crudo *> pure (construirMundo crudo))
+
+validarV2aV6 :: MundoCrudo -> V ()
+validarV2aV6 (MundoCrudo _ bloques) =
+  comprobar erroresV2
+    *> comprobar erroresV3
+    *> comprobar erroresV4
+    *> comprobar erroresV5
+    *> comprobar erroresV6
+  where
+    salas = [sala | BloqueSala sala <- bloques]
+    idsSalas = [ident | SalaCruda ident _ _ _ <- salas]
+    idsObjetos = [objetoId objeto | BloqueObjeto objeto <- bloques]
+    catalogoSalas = Map.fromList [(ident, ()) | ident <- idsSalas]
+    catalogoObjetos = Map.fromList [(ident, ()) | ident <- idsObjetos]
+
+    erroresV2 =
+      [ErrorIdDuplicado "sala" (unIdSala ident) | ident <- duplicados idsSalas]
+      ++ [ErrorIdDuplicado "objeto" (unIdObjeto ident) | ident <- duplicados idsObjetos]
+
+    erroresV3 =
+      [ ErrorSalidaInexistente origen direccion destino
+      | SalaCruda origen _ salidas _ <- salas
+      , (direccion, Salida destino _) <- salidas
+      , Map.notMember destino catalogoSalas
+      ]
+
+    erroresV4 =
+      [ ErrorRequisitoInexistente origen direccion requisito
+      | SalaCruda origen _ salidas _ <- salas
+      , (direccion, Salida _ (Just requisito)) <- salidas
+      , Map.notMember requisito catalogoObjetos
+      ]
+
+    erroresV5 =
+      [ ErrorSalidasDuplicadas origen direccion
+      | SalaCruda origen _ salidas _ <- salas
+      , direccion <- duplicados (map fst salidas)
+      ]
+
+    erroresV6 =
+      [ ErrorObjetoNoDefinido origen objeto
+      | SalaCruda origen _ _ presentes <- salas
+      , objeto <- presentes
+      , Map.notMember objeto catalogoObjetos
+      ]
+
+duplicados :: Ord a => [a] -> [a]
+duplicados valores =
+  [valor | (valor, cantidad) <- Map.toList conteos, cantidad > 1]
+  where
+    conteos = Map.fromListWith (+) [(valor, 1 :: Int) | valor <- valores]
+
 
 parsearMundoCrudo :: [Linea] -> V MundoCrudo
 parsearMundoCrudo lineas =
