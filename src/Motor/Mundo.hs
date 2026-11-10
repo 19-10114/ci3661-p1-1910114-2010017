@@ -17,6 +17,7 @@ import Data.List (dropWhileEnd)
 import qualified Data.Map.Strict as Map
 import qualified Motor.Reconocedor as R
 import Motor.Tipos
+import qualified Data.Set as Set
 
 type Linea = (Int, String)
 type V = Validacion ErrorMundo
@@ -37,7 +38,108 @@ data MundoCrudo = MundoCrudo Cabecera [BloqueCrudo]
 leerMundo :: String -> Either [ErrorMundo] Mundo
 leerMundo texto = do
   crudo <- validacionAEither (parsearMundoCrudo (zip [1 ..] (lines texto)))
-  validacionAEither (validarV2aV6 crudo *> pure (construirMundo crudo))
+  validacionAEither $
+    validarV2aV6 crudo *> validarV7aV10 crudo *> pure (construirMundo crudo)
+
+validarV7aV10 :: MundoCrudo -> V ()
+validarV7aV10 (MundoCrudo (Cabecera _ inicio meta recetas) bloques) =
+  comprobar erroresV7
+    *> comprobar erroresV8
+    *> comprobar erroresV9
+    *> comprobar erroresV10
+    *> comprobar erroresRecetas
+  where
+    salas = [sala | BloqueSala sala <- bloques]
+    idsSalas = Set.fromList [ident | SalaCruda ident _ _ _ <- salas]
+    idsObjetos = Set.fromList [objetoId objeto | BloqueObjeto objeto <- bloques]
+
+    colocaciones = Map.fromListWith (++)
+      [ (objeto, [ident])
+      | SalaCruda ident _ _ presentes <- salas
+      , objeto <- presentes
+      ]
+
+    erroresV7 =
+      [ ErrorObjetoColocadoMultiple objeto (primera : segunda : resto)
+      | (objeto, primera : segunda : resto) <- Map.toList colocaciones
+      ]
+
+    (salaMeta, objetosMeta) =
+      case meta of
+        LlegarA destino -> (destino, [])
+        LlevarA objeto destino -> (destino, [objeto])
+
+    inicioExiste = Set.member inicio idsSalas
+
+    erroresV8 =
+      [ErrorInicioInexistente inicio | not inicioExiste]
+      ++ [ErrorMetaInexistente ("sala " ++ unIdSala salaMeta)
+         | Set.notMember salaMeta idsSalas]
+      ++ [ErrorMetaInexistente ("objeto " ++ unIdObjeto objeto)
+         | objeto <- objetosMeta, Set.notMember objeto idsObjetos]
+
+    conexiones = Map.fromListWith (++)
+      [ (ident, [destino | (_, Salida destino _) <- salidas, Set.member destino idsSalas])
+      | SalaCruda ident _ salidas _ <- salas
+      ]
+
+    visitadas = salasAlcanzables conexiones inicio
+    erroresV9 =
+      [ ErrorSalaInalcanzable ident
+      | inicioExiste
+      , ident <- Set.toList (idsSalas `Set.difference` visitadas)
+      ]
+
+    requisitos =
+      [ objeto
+      | SalaCruda _ _ salidas _ <- salas
+      , (_, Salida _ (Just objeto)) <- salidas
+      ]
+
+    objetosNecesarios = Set.fromList (objetosMeta ++ requisitos)
+    objetosColocados = Map.keysSet colocaciones `Set.intersection` idsObjetos
+
+    objetosDeReceta (Receta ingrediente1 ingrediente2 resultado) =
+      [ingrediente1, ingrediente2, resultado]
+
+    recetasValidas =
+      [receta | receta <- recetas, all (`Set.member` idsObjetos) (objetosDeReceta receta)]
+
+    conseguibles = cerrarRecetas recetasValidas objetosColocados
+    erroresV10 =
+      [ ErrorObjetoNoConseguible objeto
+      | objeto <- Set.toList (objetosNecesarios `Set.intersection` idsObjetos)
+      , Set.notMember objeto conseguibles
+      ]
+
+    erroresRecetas =
+      [ ErrorRecetaObjetoInexistente objeto
+      | objeto <- Set.toList (Set.fromList (concatMap objetosDeReceta recetas))
+      , Set.notMember objeto idsObjetos
+      ]
+
+salasAlcanzables :: Map.Map IdSala [IdSala] -> IdSala -> Set.Set IdSala
+salasAlcanzables conexiones inicio = recorrer Set.empty [inicio]
+  where
+    recorrer visitadas [] = visitadas
+    recorrer visitadas (actual : pendientes)
+      | Set.member actual visitadas = recorrer visitadas pendientes
+      | otherwise =
+          let destinos = Map.findWithDefault [] actual conexiones
+          in recorrer (Set.insert actual visitadas) (destinos ++ pendientes)
+
+cerrarRecetas :: [Receta] -> Set.Set IdObjeto -> Set.Set IdObjeto
+cerrarRecetas recetas disponibles
+  | ampliados == disponibles = disponibles
+  | otherwise = cerrarRecetas recetas ampliados
+  where
+    ampliados = Set.union disponibles (Set.fromList resultados)
+    resultados =
+      [ resultado
+      | Receta ingrediente1 ingrediente2 resultado <- recetas
+      , Set.member ingrediente1 disponibles
+      , Set.member ingrediente2 disponibles
+      ]
 
 validarV2aV6 :: MundoCrudo -> V ()
 validarV2aV6 (MundoCrudo _ bloques) =
