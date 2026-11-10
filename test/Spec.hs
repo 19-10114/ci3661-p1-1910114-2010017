@@ -143,7 +143,11 @@ mockMundo = Mundo
   , mundoInicio = IdSala "vestibulo"
   , mundoMeta = LlegarA (IdSala "tesoro")
   , mundoObjetos = Map.fromList
-      [(IdObjeto "llave_dorada", Objeto (IdObjeto "llave_dorada") "Una llave reluciente.")]
+      [ (IdObjeto "llave_dorada", Objeto (IdObjeto "llave_dorada") "Una llave reluciente.")
+      , (IdObjeto "polvo_rojo",   Objeto (IdObjeto "polvo_rojo")   "Un extraño polvo rojizo.")
+      , (IdObjeto "polvo_azul",   Objeto (IdObjeto "polvo_azul")   "Un frasco con polvo azulado.")
+      , (IdObjeto "pildora_magica", Objeto (IdObjeto "pildora_magica") "Una píldora brillante alquímica.")
+      ]
   , mundoSalas = Map.fromList
       [ ( IdSala "vestibulo"
         , Sala
@@ -153,7 +157,7 @@ mockMundo = Mundo
                 [ (Norte, Salida (IdSala "pasillo") Nothing)
                 , (Este, Salida (IdSala "tesoro") (Just (IdObjeto "llave_dorada")))
                 ]
-            , salaObjetos = [IdObjeto "llave_dorada"]
+            , salaObjetos = [IdObjeto "llave_dorada", IdObjeto "polvo_rojo", IdObjeto "polvo_azul"]
             }
         )
       , ( IdSala "pasillo"
@@ -173,7 +177,9 @@ mockMundo = Mundo
             }
         )
       ]
-  , mundoRecetas = []
+  , mundoRecetas =
+      [ Receta (IdObjeto "polvo_rojo") (IdObjeto "polvo_azul") (IdObjeto "pildora_magica")
+      ]
   }
 
 testsNucleo :: Test
@@ -229,6 +235,111 @@ testsNucleo = TestList
           estConObj = (estadoInicial mundoMetaLlevar) { estadoSalaActual = IdSala "pasillo", estadoInventario = [IdObjeto "llave_dorada"] }
       assertEqual "No gana en pasillo sin el objeto requerido" False (haGanado estSinObj)
       assertEqual "Gana en pasillo portando el objeto requerido" True (haGanado estConObj)
+
+    -- 9. Tomar objeto
+  , TestCase $ do
+      let est0 = estadoInicial mockMundo
+          (msgs, est1) = ejecutar (Tomar (IdObjeto "llave_dorada")) est0
+      assertEqual "Inventario contiene el objeto tomado" [IdObjeto "llave_dorada"] (estadoInventario est1)
+      let salaVestibulo = Map.lookup (IdSala "vestibulo") (mundoSalas (estadoMundo est1))
+      assertEqual "Objeto removido de la sala"
+        (Just [IdObjeto "polvo_rojo", IdObjeto "polvo_azul"])
+        (fmap salaObjetos salaVestibulo)
+      assertEqual "Mensaje de confirmación" ["Has tomado: llave_dorada."] msgs
+
+    -- 10. Tomar objeto inexistente
+  , TestCase $ do
+      let est0 = estadoInicial mockMundo
+          (msgs, est1) = ejecutar (Tomar (IdObjeto "objeto_fantasma")) est0
+      assertEqual "Inventario permanece vacío" [] (estadoInventario est1)
+      assertEqual "Mensaje de error" ["No ves objeto_fantasma aquí."] msgs
+
+    -- 11. Soltar objeto
+  , TestCase $ do
+      let est0 = (estadoInicial mockMundo) { estadoInventario = [IdObjeto "llave_dorada"] }
+          (msgs, est1) = ejecutar (Soltar (IdObjeto "llave_dorada")) est0
+      assertEqual "Inventario queda vacío" [] (estadoInventario est1)
+      let salaVestibulo = Map.lookup (IdSala "vestibulo") (mundoSalas (estadoMundo est1))
+      assertEqual "Objeto añadido a la sala"
+        (Just [IdObjeto "llave_dorada", IdObjeto "llave_dorada", IdObjeto "polvo_rojo", IdObjeto "polvo_azul"])
+        (fmap salaObjetos salaVestibulo)
+      assertEqual "Mensaje de soltar" ["Has soltado: llave_dorada."] msgs
+
+    -- 12. Soltar objeto que no se posee
+  , TestCase $ do
+      let est0 = estadoInicial mockMundo
+          (msgs, est1) = ejecutar (Soltar (IdObjeto "llave_dorada")) est0
+      assertEqual "Mensaje de no llevado" ["No llevas llave_dorada en tu inventario."] msgs
+      assertEqual "Estado sin alteraciones" est0 est1
+
+    -- 13. Examinar en sala y en inventario
+  , TestCase $ do
+      let est0 = estadoInicial mockMundo
+          (msgsEnSala, _) = ejecutar (Examinar (IdObjeto "polvo_rojo")) est0
+      assertEqual "Examinar en la sala muestra descripción" ["Un extraño polvo rojizo."] msgsEnSala
+      let estConObj = est0 { estadoInventario = [IdObjeto "pildora_magica"] }
+          (msgsEnInv, _) = ejecutar (Examinar (IdObjeto "pildora_magica")) estConObj
+      assertEqual "Examinar en inventario muestra descripción" ["Una píldora brillante alquímica."] msgsEnInv
+      let (msgsNoVisto, _) = ejecutar (Examinar (IdObjeto "objeto_invisible")) est0
+      assertEqual "Examinar objeto inexistente" ["No tienes ni ves objeto_invisible aquí."] msgsNoVisto
+
+    -- 14. Inventario vacío vs con objetos
+  , TestCase $ do
+      let est0 = estadoInicial mockMundo
+          (msgsVacio, _) = ejecutar Inventario est0
+      assertEqual "Inventario vacío" ["Tu inventario está vacío."] msgsVacio
+      let estLleno = est0 { estadoInventario = [IdObjeto "polvo_rojo", IdObjeto "polvo_azul"] }
+          (msgsLleno, _) = ejecutar Inventario estLleno
+      assertEqual "Inventario con objetos" ["Llevas contigo: polvo_rojo polvo_azul"] msgsLleno
+
+    -- 15. Combinar (Variante 3: simétrica y conmutativa)
+  , TestCase $ do
+      let est0 = (estadoInicial mockMundo)
+                   { estadoInventario = [IdObjeto "polvo_rojo", IdObjeto "polvo_azul"] }
+          (msgs, est1) = ejecutar (Combinar (IdObjeto "polvo_rojo") (IdObjeto "polvo_azul")) est0
+      assertEqual "Inventario reemplaza ingredientes por producto"
+        [IdObjeto "pildora_magica"] (estadoInventario est1)
+      assertEqual "Mensaje de combinación exitosa"
+        ["Has combinado polvo_rojo con polvo_azul para obtener: pildora_magica."] msgs
+
+      -- Prueba de conmutatividad: combinar b con a
+      let (msgsConmutativo, estConmutativo) =
+            ejecutar (Combinar (IdObjeto "polvo_azul") (IdObjeto "polvo_rojo")) est0
+      assertEqual "Combinación conmutativa da el mismo producto"
+        [IdObjeto "pildora_magica"] (estadoInventario estConmutativo)
+      assertEqual "Mensaje conmutativo"
+        ["Has combinado polvo_azul con polvo_rojo para obtener: pildora_magica."] msgsConmutativo
+
+    -- 16. Combinar con ingredientes faltantes
+  , TestCase $ do
+      let est0 = (estadoInicial mockMundo) { estadoInventario = [IdObjeto "polvo_rojo"] }
+          (msgs, est1) = ejecutar (Combinar (IdObjeto "polvo_rojo") (IdObjeto "polvo_azul")) est0
+      assertEqual "Falta un ingrediente"
+        ["No tienes ambos objetos en tu inventario para combinarlos."] msgs
+      assertEqual "Inventario sin cambios" [IdObjeto "polvo_rojo"] (estadoInventario est1)
+
+    -- 17. Combinar receta inexistente
+  , TestCase $ do
+      let est0 = (estadoInicial mockMundo)
+                   { estadoInventario = [IdObjeto "llave_dorada", IdObjeto "polvo_rojo"] }
+          (msgs, est1) = ejecutar (Combinar (IdObjeto "llave_dorada") (IdObjeto "polvo_rojo")) est0
+      assertEqual "Receta inexistente"
+        ["No parece que estos dos objetos se puedan combinar."] msgs
+      assertEqual "Inventario sin cambios"
+        [IdObjeto "llave_dorada", IdObjeto "polvo_rojo"] (estadoInventario est1)
+
+    -- 18. Victoria mediante combinación en la sala de meta
+  , TestCase $ do
+      let mundoMetaAlquimia = mockMundo
+            { mundoMeta = LlevarA (IdObjeto "pildora_magica") (IdSala "vestibulo") }
+          est0 = (estadoInicial mundoMetaAlquimia)
+                   { estadoInventario = [IdObjeto "polvo_rojo", IdObjeto "polvo_azul"] }
+          (msgs, est1) = ejecutar (Combinar (IdObjeto "polvo_rojo") (IdObjeto "polvo_azul")) est0
+      assertEqual "Gana al fabricar el objeto de la meta en la sala de meta" True (haGanado est1)
+      assertEqual "Mensaje incluye felicitación oficial de victoria"
+        [ "Has combinado polvo_rojo con polvo_azul para obtener: pildora_magica."
+        , "*** ¡Has ganado! ***"
+        ] msgs
   ]
 
 main :: IO ()

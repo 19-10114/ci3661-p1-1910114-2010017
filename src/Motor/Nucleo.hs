@@ -8,6 +8,8 @@ Este módulo implementa la lógica puramente funcional del motor de aventuras:
 - Ejecución de comandos del jugador ('ejecutar').
 - Desplazamiento entre salas con verificación de salidas bloqueadas.
 - Desbloqueo permanente de salidas tras el primer cruce con llave (Decisión D8).
+- Manipulación de objetos: tomar, soltar, examinar e inventario.
+- Variante 3: Combinar objetos conmutativamente (a + b == b + a).
 - Verificación pura de la condición de victoria ('haGanado').
 -}
 module Motor.Nucleo
@@ -18,6 +20,7 @@ module Motor.Nucleo
   , mostrarDireccion
   ) where
 
+import Data.List (delete, find)
 import qualified Data.Map.Strict as Map
 import Motor.Tipos
 
@@ -52,6 +55,21 @@ ejecutar cmd est =
             Nothing   -> ["Error: la sala actual no se encuentra en el mapa del mundo."]
       in (msgs, est)
 
+    Tomar obj ->
+      ejecutarTomar obj est
+
+    Soltar obj ->
+      ejecutarSoltar obj est
+
+    Examinar obj ->
+      ejecutarExaminar obj est
+
+    Inventario ->
+      ejecutarInventario est
+
+    Combinar obj1 obj2 ->
+      ejecutarCombinar obj1 obj2 est
+
     Ayuda ->
       ( [ "Comandos disponibles:"
         , "  ir <dirección>               - Moverse (norte, sur, este, oeste, arriba, abajo)"
@@ -73,31 +91,11 @@ ejecutar cmd est =
     Salir ->
       (["¡Gracias por jugar! Hasta pronto."], est)
 
-    -- Los comandos de inventario y objetos se completan en el Paso 4
-    Tomar _ ->
-      (["Comando tomar en implementación (Paso 4)."], est)
-
-    Soltar _ ->
-      (["Comando soltar en implementación (Paso 4)."], est)
-
-    Examinar _ ->
-      (["Comando examinar en implementación (Paso 4)."], est)
-
-    Inventario ->
-      ( if null (estadoInventario est)
-          then ["Tu inventario está vacío."]
-          else ["Llevas contigo: " ++ unwords (map unIdObjeto (estadoInventario est))]
-      , est
-      )
-
     Guardar _ ->
       (["Comando guardar en implementación (Paso 5)."], est)
 
     Cargar _ ->
       (["Comando cargar en implementación (Paso 5)."], est)
-
-    Combinar _ _ ->
-      (["Comando combinar en implementación (Paso 4)."], est)
 
 -- | Lógica pura de movimiento con desbloqueo permanente (Decisión D8).
 ejecutarIr :: Direccion -> Estado -> ([String], Estado)
@@ -112,7 +110,6 @@ ejecutarIr dir est =
           (["No hay salida hacia el " ++ mostrarDireccion dir ++ "."], est)
 
         Just (Salida destino Nothing) ->
-          -- Salida sin bloqueo: movimiento directo
           let nuevoEstado = est { estadoSalaActual = destino }
               victoriaMsg = if haGanado nuevoEstado then ["*** ¡Has ganado! ***"] else []
               salaDestino = Map.lookup destino (mundoSalas (estadoMundo nuevoEstado))
@@ -120,10 +117,8 @@ ejecutarIr dir est =
           in (msgs, nuevoEstado)
 
         Just (Salida destino (Just req)) ->
-          -- Salida bloqueada: requiere tener el objeto en el inventario
           if req `elem` estadoInventario est
             then
-              -- Tiene el objeto: cruza y la salida queda permanentemente desbloqueada
               let salidaDesbloqueada = Salida destino Nothing
                   salidasActualizadas = Map.insert dir salidaDesbloqueada (salaSalidas salaActual)
                   salaActualizada = salaActual { salaSalidas = salidasActualizadas }
@@ -141,11 +136,102 @@ ejecutarIr dir est =
                          ] ++ describirSala salaDestino ++ victoriaMsg
               in (msgs, nuevoEstado)
             else
-              -- No tiene el objeto: no se mueve
               ( ["La salida hacia el " ++ mostrarDireccion dir
                  ++ " está bloqueada. Requiere: " ++ unIdObjeto req ++ "."]
               , est
               )
+
+-- | Toma un objeto de la sala actual y lo transfiere al inventario.
+ejecutarTomar :: IdObjeto -> Estado -> ([String], Estado)
+ejecutarTomar obj est =
+  case Map.lookup (estadoSalaActual est) (mundoSalas (estadoMundo est)) of
+    Nothing -> (["Error: la sala actual no existe en el mundo."], est)
+    Just salaActual ->
+      if obj `elem` salaObjetos salaActual
+        then
+          let nuevaSala = salaActual { salaObjetos = delete obj (salaObjetos salaActual) }
+              nuevoMundo = (estadoMundo est)
+                { mundoSalas = Map.insert (salaId salaActual) nuevaSala (mundoSalas (estadoMundo est)) }
+              nuevoEstado = est
+                { estadoMundo      = nuevoMundo
+                , estadoInventario = obj : estadoInventario est
+                }
+              victoriaMsg = if haGanado nuevoEstado then ["*** ¡Has ganado! ***"] else []
+              msgs = ["Has tomado: " ++ unIdObjeto obj ++ "."] ++ victoriaMsg
+          in (msgs, nuevoEstado)
+        else
+          (["No ves " ++ unIdObjeto obj ++ " aquí."], est)
+
+-- | Suelta un objeto del inventario y lo deja en la sala actual.
+ejecutarSoltar :: IdObjeto -> Estado -> ([String], Estado)
+ejecutarSoltar obj est =
+  if obj `elem` estadoInventario est
+    then case Map.lookup (estadoSalaActual est) (mundoSalas (estadoMundo est)) of
+      Nothing -> (["Error: la sala actual no existe en el mundo."], est)
+      Just salaActual ->
+        let nuevaSala = salaActual { salaObjetos = obj : salaObjetos salaActual }
+            nuevoMundo = (estadoMundo est)
+              { mundoSalas = Map.insert (salaId salaActual) nuevaSala (mundoSalas (estadoMundo est)) }
+            nuevoEstado = est
+              { estadoMundo      = nuevoMundo
+              , estadoInventario = delete obj (estadoInventario est)
+              }
+        in (["Has soltado: " ++ unIdObjeto obj ++ "."], nuevoEstado)
+    else
+      (["No llevas " ++ unIdObjeto obj ++ " en tu inventario."], est)
+
+-- | Muestra la descripción de un objeto si está en el inventario o en la sala actual.
+ejecutarExaminar :: IdObjeto -> Estado -> ([String], Estado)
+ejecutarExaminar obj est =
+  let enInventario = obj `elem` estadoInventario est
+      enSala = case Map.lookup (estadoSalaActual est) (mundoSalas (estadoMundo est)) of
+        Just sala -> obj `elem` salaObjetos sala
+        Nothing   -> False
+  in if enInventario || enSala
+       then case Map.lookup obj (mundoObjetos (estadoMundo est)) of
+         Just info -> ([objetoDescripcion info], est)
+         Nothing   -> (["No hay nada especial sobre " ++ unIdObjeto obj ++ "."], est)
+       else
+         (["No tienes ni ves " ++ unIdObjeto obj ++ " aquí."], est)
+
+-- | Lista los objetos que el jugador porta actualmente.
+ejecutarInventario :: Estado -> ([String], Estado)
+ejecutarInventario est =
+  let inv = estadoInventario est
+      msg = if null inv
+        then "Tu inventario está vacío."
+        else "Llevas contigo: " ++ unwords (map unIdObjeto inv)
+  in ([msg], est)
+
+-- | Variante 3 (Combinar): Sintetiza dos objetos del inventario en un nuevo objeto.
+-- Es simétrica/conmutativa: combinar a con b == combinar b con a (Decisión D5).
+ejecutarCombinar :: IdObjeto -> IdObjeto -> Estado -> ([String], Estado)
+ejecutarCombinar obj1 obj2 est =
+  let inv = estadoInventario est
+      tieneIngredientes =
+        if obj1 == obj2
+          then length (filter (== obj1) inv) >= 2
+          else (obj1 `elem` inv) && (obj2 `elem` inv)
+  in if not tieneIngredientes
+       then (["No tienes ambos objetos en tu inventario para combinarlos."], est)
+       else
+         let recetas = mundoRecetas (estadoMundo est)
+             coincide (Receta r1 r2 _) =
+               (r1 == obj1 && r2 == obj2) || (r1 == obj2 && r2 == obj1)
+         in case find coincide recetas of
+           Nothing ->
+             (["No parece que estos dos objetos se puedan combinar."], est)
+
+           Just (Receta _ _ res) ->
+             let invSinIngrediente1 = delete obj1 inv
+                 invSinIngredientes = delete obj2 invSinIngrediente1
+                 nuevoInv = res : invSinIngredientes
+                 nuevoEstado = est { estadoInventario = nuevoInv }
+                 victoriaMsg = if haGanado nuevoEstado then ["*** ¡Has ganado! ***"] else []
+                 msgs = [ "Has combinado " ++ unIdObjeto obj1 ++ " con " ++ unIdObjeto obj2
+                          ++ " para obtener: " ++ unIdObjeto res ++ "."
+                        ] ++ victoriaMsg
+             in (msgs, nuevoEstado)
 
 -- | Formatea la descripción visual de una sala, sus objetos y sus salidas.
 describirSala :: Maybe Sala -> [String]
