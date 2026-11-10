@@ -90,6 +90,11 @@ testsMundos = TestList
       assertEqual "mundo válido con un objeto de meta obtenido por receta"
         (Right "Taller")
         (fmap mundoTitulo (leerMundo mundoConReceta))
+  ,   TestLabel "mundo de ejemplo del profesor" $ TestCase $ do
+      texto <- readFile "mundos/entrega.txt"
+      assertEqual "se acepta el mundo de ejemplo"
+        (Right "Entrega a última hora")
+        (fmap mundoTitulo (leerMundo texto))
   , mundoInvalido "mundos/invalidos/sintaxis.txt" 2
   , mundoInvalido "mundos/invalidos/referencias.txt" 5
   , mundoInvalido "mundos/invalidos/receta.txt" 4
