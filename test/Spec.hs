@@ -6,7 +6,14 @@ import Motor.Mundo (leerMundo)
 import Motor.Nucleo (ejecutar, estadoInicial, haGanado)
 import Motor.Reconocedor (identificador, reconocerCompleto, runParser, separadorBloque)
 import Motor.Tipos
+import System.IO (IOMode (ReadMode), hGetContents, hSetEncoding, utf8, withFile)
 import Test.HUnit
+
+leerArchivoUtf8 :: FilePath -> IO String
+leerArchivoUtf8 ruta = withFile ruta ReadMode $ \h -> do
+  hSetEncoding h utf8
+  contenido <- hGetContents h
+  length contenido `seq` return contenido
 
 testsComandos :: Test
 testsComandos = TestList
@@ -91,18 +98,19 @@ testsMundos = TestList
         (Right "Taller")
         (fmap mundoTitulo (leerMundo mundoConReceta))
   ,   TestLabel "mundo de ejemplo del profesor" $ TestCase $ do
-      texto <- readFile "mundos/entrega.txt"
+      texto <- leerArchivoUtf8 "mundos/entrega.txt"
       assertEqual "se acepta el mundo de ejemplo"
         (Right "Entrega a última hora")
         (fmap mundoTitulo (leerMundo texto))
   , mundoInvalido "mundos/invalidos/sintaxis.txt" 2
   , mundoInvalido "mundos/invalidos/referencias.txt" 5
   , mundoInvalido "mundos/invalidos/receta.txt" 4
+  , mundoInvalido "../material/mundos/invalido_semantica.txt" 9
   ]
 
 mundoInvalido :: FilePath -> Int -> Test
 mundoInvalido archivo esperados = TestLabel archivo $ TestCase $ do
-  texto <- readFile archivo
+  texto <- leerArchivoUtf8 archivo
   case leerMundo texto of
     Left errores -> assertEqual "cantidad de errores" esperados (length errores)
     Right _ -> assertFailure "Se aceptó un mundo que debía ser inválido"
