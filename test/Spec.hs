@@ -86,6 +86,10 @@ testsReconocedor = TestList
         (Just "---")
         (reconocerCompleto separadorBloque "  ---  ")
   , TestCase $
+      assertEqual "separador con dos guiones"
+        (Just "--")
+        (reconocerCompleto separadorBloque "  --  ")
+  , TestCase $
       assertEqual "separador con texto sobrante"
         Nothing
         (reconocerCompleto separadorBloque "--- extra")

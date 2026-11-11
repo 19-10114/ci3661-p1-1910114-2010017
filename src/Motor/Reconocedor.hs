@@ -73,4 +73,4 @@ reconocerCompleto parser entrada =
   listToMaybe [valor | (valor, "") <- runParser parser entrada]
 
 separadorBloque :: Parser String
-separadorBloque = espacios *> string "---" <* espacios
+separadorBloque = espacios *> (string "---" <|> string "--") <* espacios
