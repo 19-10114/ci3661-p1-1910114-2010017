@@ -1,5 +1,6 @@
 module Main where
 
+import Data.List (isInfixOf)
 import qualified Data.Map.Strict as Map
 import Motor.Comandos (leerComando)
 import Motor.Mundo (leerMundo)
@@ -348,6 +349,173 @@ testsNucleo = TestList
         ] msgs
   ]
 
+-- | Ejecuta secuencialmente una lista de comandos sin IO, acumulando los mensajes.
+ejecutarSecuencia :: [Comando] -> Estado -> ([String], Estado)
+ejecutarSecuencia [] est = ([], est)
+ejecutarSecuencia (c:cs) est =
+  let (msgs1, est1) = ejecutar c est
+      (msgs2, est2) = ejecutarSecuencia cs est1
+  in (msgs1 ++ msgs2, est2)
+
+testsSecuencias :: Test
+testsSecuencias = TestList
+  [ TestLabel "Secuencia pura: chocar con salida bloqueada, tomar llave y desbloquear permanentemente" $ TestCase $ do
+      let est0 = estadoInicial mockMundo
+      -- 1. Intenta cruzar hacia el este (bloqueado por llave_dorada)
+      let (msgs1, est1) = ejecutarSecuencia [Ir Este] est0
+      assertEqual "No se mueve de vestíbulo" (IdSala "vestibulo") (estadoSalaActual est1)
+      assertEqual "Mensaje indica bloqueo por llave_dorada"
+        ["La salida hacia el este está bloqueada. Requiere: llave_dorada."] msgs1
+
+      -- 2. Toma la llave y cruza hacia el este
+      let (msgs2, est2) = ejecutarSecuencia [Tomar (IdObjeto "llave_dorada"), Ir Este] est1
+      assertEqual "Cruza a la cámara del tesoro" (IdSala "tesoro") (estadoSalaActual est2)
+      assertEqual "Alcanzó meta LlegarA" True (haGanado est2)
+      assertEqual "Mensajes incluyen uso de llave y victoria"
+        True (any (== "*** ¡Has ganado! ***") msgs2)
+
+      -- 3. Regresa al vestíbulo, suelta la llave y vuelve a entrar sin ella
+      let (msgs3, est3) = ejecutarSecuencia
+            [ Ir Oeste
+            , Soltar (IdObjeto "llave_dorada")
+            , Ir Este
+            ] est2
+      assertEqual "Entra de nuevo al tesoro sin tener la llave" (IdSala "tesoro") (estadoSalaActual est3)
+      assertEqual "Inventario no tiene la llave" False (IdObjeto "llave_dorada" `elem` estadoInventario est3)
+      assertEqual "Vuelve a ganar al reingresar" True (haGanado est3)
+      assertEqual "No vuelve a pedir la llave" False (any ("bloqueada" `isInfixOf`) msgs3)
+
+  , TestLabel "Secuencia pura: combinación simétrica y obtención inductiva de producto para ganar" $ TestCase $ do
+      let mundoMetaQuimica = mockMundo
+            { mundoMeta = LlevarA (IdObjeto "pildora_magica") (IdSala "pasillo") }
+          est0 = estadoInicial mundoMetaQuimica
+          secuencia =
+            [ Tomar (IdObjeto "polvo_azul")
+            , Tomar (IdObjeto "polvo_rojo")
+            , Inventario
+            , Combinar (IdObjeto "polvo_azul") (IdObjeto "polvo_rojo")
+            , Examinar (IdObjeto "pildora_magica")
+            , Ir Norte
+            ]
+          (msgs, estFinal) = ejecutarSecuencia secuencia est0
+
+      assertEqual "Llega a la sala pasillo" (IdSala "pasillo") (estadoSalaActual estFinal)
+      assertEqual "Inventario solo contiene el producto sintetizado"
+        [IdObjeto "pildora_magica"] (estadoInventario estFinal)
+      assertEqual "Condición de victoria cumplida" True (haGanado estFinal)
+      assertEqual "Mensaje oficial de victoria emitido"
+        True (any (== "*** ¡Has ganado! ***") msgs)
+
+  , TestLabel "Secuencia pura: cadena de recetas en varios pasos (A + B -> C, C + D -> E)" $ TestCase $ do
+      let mundoAlquimiaCadena = mockMundo
+            { mundoObjetos = Map.fromList
+                [ (IdObjeto "hierro",   Objeto (IdObjeto "hierro") "Un lingote de hierro.")
+                , (IdObjeto "carbon",   Objeto (IdObjeto "carbon") "Un trozo de carbón mineral.")
+                , (IdObjeto "acero",    Objeto (IdObjeto "acero") "Una barra de acero templado.")
+                , (IdObjeto "mango",    Objeto (IdObjeto "mango") "Un mango de madera tallada.")
+                , (IdObjeto "espada",   Objeto (IdObjeto "espada") "Una espada reluciente.")
+                ]
+            , mundoRecetas =
+                [ Receta (IdObjeto "hierro") (IdObjeto "carbon") (IdObjeto "acero")
+                , Receta (IdObjeto "acero")  (IdObjeto "mango")  (IdObjeto "espada")
+                ]
+            , mundoSalas = Map.fromList
+                [ ( IdSala "vestibulo"
+                  , Sala
+                      { salaId = IdSala "vestibulo"
+                      , salaDescripcion = "Forja antigua."
+                      , salaSalidas = Map.empty
+                      , salaObjetos = [IdObjeto "hierro", IdObjeto "carbon", IdObjeto "mango"]
+                      }
+                  )
+                ]
+            , mundoMeta = LlevarA (IdObjeto "espada") (IdSala "vestibulo")
+            }
+          est0 = estadoInicial mundoAlquimiaCadena
+          secuencia =
+            [ Tomar (IdObjeto "hierro")
+            , Tomar (IdObjeto "carbon")
+            , Tomar (IdObjeto "mango")
+            , Combinar (IdObjeto "hierro") (IdObjeto "carbon")
+            , Combinar (IdObjeto "mango") (IdObjeto "acero") -- Conmutativo: mango + acero
+            ]
+          (msgs, estFinal) = ejecutarSecuencia secuencia est0
+
+      assertEqual "Inventario final contiene únicamente la espada resultante"
+        [IdObjeto "espada"] (estadoInventario estFinal)
+      assertEqual "Victoria al completar la síntesis de la meta en la sala objetivo"
+        True (haGanado estFinal)
+      assertEqual "Mensaje de victoria presente"
+        True (any (== "*** ¡Has ganado! ***") msgs)
+
+  , TestLabel "Secuencia pura: comandos inválidos y de error no corrompen el estado del juego" $ TestCase $ do
+      let est0 = estadoInicial mockMundo
+          secuencia =
+            [ Ir Abajo                                               -- No hay salida
+            , Tomar (IdObjeto "fantasma")                            -- Objeto no existe
+            , Soltar (IdObjeto "fantasma")                           -- No lo lleva
+            , Combinar (IdObjeto "fantasma") (IdObjeto "polvo_rojo") -- No lo tiene
+            , Mirar                                                  -- Informativo puro
+            , Ayuda                                                  -- Informativo puro
+            , Inventario                                             -- Vacío
+            ]
+          (_, estFinal) = ejecutarSecuencia secuencia est0
+
+      assertEqual "Sala actual intacta tras comandos fallidos"
+        (estadoSalaActual est0) (estadoSalaActual estFinal)
+      assertEqual "Inventario intacto y vacío"
+        [] (estadoInventario estFinal)
+      assertEqual "Salas y objetos intactos en el mundo"
+        (mundoSalas (estadoMundo est0)) (mundoSalas (estadoMundo estFinal))
+
+  , TestLabel "Variante 3: intentar combinar con solo 1 copia cuando la receta pide el mismo objeto" $ TestCase $ do
+      let mundoDoble = mockMundo
+            { mundoObjetos = Map.fromList
+                [ (IdObjeto "cristal", Objeto (IdObjeto "cristal") "Un cristal.")
+                , (IdObjeto "diamante", Objeto (IdObjeto "diamante") "Un diamante.")
+                ]
+            , mundoRecetas =
+                [ Receta (IdObjeto "cristal") (IdObjeto "cristal") (IdObjeto "diamante")
+                ]
+            }
+          estConUnCristal = (estadoInicial mundoDoble)
+            { estadoInventario = [IdObjeto "cristal"] }
+          (msgs1, est1) = ejecutar (Combinar (IdObjeto "cristal") (IdObjeto "cristal")) estConUnCristal
+
+      assertEqual "Rechaza combinación si no tiene 2 unidades del mismo ingrediente"
+        ["No tienes ambos objetos en tu inventario para combinarlos."] msgs1
+      assertEqual "Inventario preserva la única copia"
+        [IdObjeto "cristal"] (estadoInventario est1)
+
+      -- Caso con 2 copias:
+      let estConDosCristales = estConUnCristal
+            { estadoInventario = [IdObjeto "cristal", IdObjeto "cristal"] }
+          (msgs2, est2) = ejecutar (Combinar (IdObjeto "cristal") (IdObjeto "cristal")) estConDosCristales
+
+      assertEqual "Acepta combinación al tener 2 unidades del mismo ingrediente"
+        [IdObjeto "diamante"] (estadoInventario est2)
+      assertEqual "Mensaje confirma obtención de diamante"
+        ["Has combinado cristal con cristal para obtener: diamante."] msgs2
+
+  , TestLabel "Variante 3: combinación conserva copias sobrantes en el inventario" $ TestCase $ do
+      let estConSobrantes = (estadoInicial mockMundo)
+            { estadoInventario =
+                [ IdObjeto "polvo_rojo"
+                , IdObjeto "polvo_azul"
+                , IdObjeto "polvo_rojo"
+                , IdObjeto "llave_dorada"
+                ]
+            }
+          (msgs, estFinal) =
+            ejecutar (Combinar (IdObjeto "polvo_rojo") (IdObjeto "polvo_azul")) estConSobrantes
+
+      assertEqual "Consume solo 1 de cada ingrediente y conserva el resto"
+        [IdObjeto "pildora_magica", IdObjeto "polvo_rojo", IdObjeto "llave_dorada"]
+        (estadoInventario estFinal)
+      assertEqual "Mensaje correcto"
+        ["Has combinado polvo_rojo con polvo_azul para obtener: pildora_magica."] msgs
+  ]
+
 testsPersistencia :: Test
 testsPersistencia = TestList
   [ TestLabel "guardar y cargar partida exitosa" $ TestCase $ do
@@ -422,6 +590,7 @@ main = do
     , testsReconocedor
     , testsMundos
     , testsNucleo
+    , testsSecuencias
     , testsPersistencia
     ])
   if errors resultado + failures resultado == 0
