@@ -1,0 +1,22 @@
+mirar
+este
+tomar tarjeta_acceso
+inventario
+oeste
+norte
+este
+tomar cristal_resina
+oeste
+oeste
+tomar polvo_cobalto
+este
+norte
+tomar catalizador
+sur
+combinar cristal_resina con polvo_cobalto
+examinar aleacion_energetica
+abajo
+tomar bateria_antigua
+norte
+combinar aleacion_energetica con catalizador
+arriba

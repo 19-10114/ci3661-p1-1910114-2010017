@@ -109,6 +109,11 @@ testsMundos = TestList
       assertEqual "se acepta el mundo de ejemplo"
         (Right "Entrega a última hora")
         (fmap mundoTitulo (leerMundo texto))
+  ,   TestLabel "mundo propio de los estudiantes" $ TestCase $ do
+      texto <- leerArchivoUtf8 "mundos/mundo.txt"
+      assertEqual "se acepta el mundo propio"
+        (Right "El Secreto del Laboratorio F")
+        (fmap mundoTitulo (leerMundo texto))
   , mundoInvalido "mundos/invalidos/sintaxis.txt" 2
   , mundoInvalido "mundos/invalidos/referencias.txt" 5
   , mundoInvalido "mundos/invalidos/receta.txt" 4

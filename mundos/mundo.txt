@@ -1,0 +1,85 @@
+# ==============================================================================
+# PROYECTO 1: MOTOR DE AVENTURAS EN HASKELL (CI-3661, Sep–Dic 2026)
+# Universidad Simón Bolívar - Laboratorio de Lenguajes de Programación I
+# Pareja: Stefano Casale (19-10114) y Nazareth Colmenarez (20-10017)
+# Variante 3: Combinar (RECETA: a + b -> c)
+# ==============================================================================
+
+MUNDO: El Secreto del Laboratorio F
+INICIO: plaza_cubierta
+META: llevar dispositivo_cuantico a sala_de_servidores
+RECETA: cristal_resina + polvo_cobalto -> aleacion_energetica
+RECETA: aleacion_energetica + catalizador -> dispositivo_cuantico
+---
+OBJETO: tarjeta_acceso
+DESC: Una tarjeta magnética con el sello del Departamento de Computación.
+---
+OBJETO: cristal_resina
+DESC: Un cristal translúcido que emite una leve luminiscencia ámbar.
+---
+OBJETO: polvo_cobalto
+DESC: Un fino polvo azul cobalto preservado en un tubo de ensayo sellado.
+---
+OBJETO: catalizador
+DESC: Un reactivo químico purificado que acelera reacciones de síntesis avanzada.
+---
+OBJETO: bateria_antigua
+DESC: Una batería pesada de alto voltaje, aún con carga residual suficiente.
+---
+OBJETO: herramienta_multiuso
+DESC: Una herramienta articulada de ingeniería para calibrar terminales.
+---
+OBJETO: aleacion_energetica
+DESC: Una aleación metalizada altamente conductora sintetizada en alquimia computacional.
+---
+OBJETO: dispositivo_cuantico
+DESC: El núcleo de procesamiento cuántico calibrado necesario para reactivar los servidores.
+---
+SALA: plaza_cubierta
+DESC: La plaza cubierta del campus. Bancos de concreto bajo la sombra de los árboles.
+SALIDA: norte -> pasillo_central
+SALIDA: este -> jardin_botanico
+---
+SALA: jardin_botanico
+DESC: Senderos empedrados rodeados de helechos y vegetación de Sartenejas.
+SALIDA: oeste -> plaza_cubierta
+OBJETO: tarjeta_acceso
+---
+SALA: pasillo_central
+DESC: Un pasillo iluminado con acceso a los principales laboratorios de la división.
+SALIDA: sur -> plaza_cubierta
+SALIDA: este -> laboratorio_quimica
+SALIDA: oeste -> taller_mecanica
+SALIDA: norte -> biblioteca_central
+SALIDA: abajo -> deposito_subterraneo requiere tarjeta_acceso
+---
+SALA: laboratorio_quimica
+DESC: Mesones de granito con mecheros apagados y probetas alineadas con precisión.
+SALIDA: oeste -> pasillo_central
+OBJETO: cristal_resina
+---
+SALA: taller_mecanica
+DESC: Mesas de trabajo con tornillos de banco, fresadoras y virutas metálicas.
+SALIDA: este -> pasillo_central
+OBJETO: polvo_cobalto
+OBJETO: herramienta_multiuso
+---
+SALA: biblioteca_central
+DESC: Pasillos silenciosos repletos de volúmenes empastados y literatura técnica.
+SALIDA: sur -> pasillo_central
+OBJETO: catalizador
+---
+SALA: deposito_subterraneo
+DESC: Un recinto húmedo y fresco bajo los cimientos, donde descansan repuestos antiguos.
+SALIDA: arriba -> pasillo_central
+SALIDA: norte -> tunel_de_servicio requiere aleacion_energetica
+OBJETO: bateria_antigua
+---
+SALA: tunel_de_servicio
+DESC: Una galería técnica con conductos de ventilación y cableado de alta potencia.
+SALIDA: sur -> deposito_subterraneo
+SALIDA: arriba -> sala_de_servidores requiere bateria_antigua
+---
+SALA: sala_de_servidores
+DESC: El centro de cómputo principal. Racks de servidores esperando por el dispositivo cuántico.
+SALIDA: abajo -> tunel_de_servicio
