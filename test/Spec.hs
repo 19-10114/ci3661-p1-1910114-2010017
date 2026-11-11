@@ -4,8 +4,10 @@ import qualified Data.Map.Strict as Map
 import Motor.Comandos (leerComando)
 import Motor.Mundo (leerMundo)
 import Motor.Nucleo (ejecutar, estadoInicial, haGanado)
+import Motor.Persistencia (cargarPartida, guardarPartida, leerArchivoMundo)
 import Motor.Reconocedor (identificador, reconocerCompleto, runParser, separadorBloque)
 import Motor.Tipos
+import System.Directory (doesFileExist, removeFile)
 import System.IO (IOMode (ReadMode), hGetContents, hSetEncoding, utf8, withFile)
 import Test.HUnit
 
@@ -346,6 +348,73 @@ testsNucleo = TestList
         ] msgs
   ]
 
+testsPersistencia :: Test
+testsPersistencia = TestList
+  [ TestLabel "guardar y cargar partida exitosa" $ TestCase $ do
+      let rutaTemp = "test_guardado_ok.sav"
+          est0 = (estadoInicial mockMundo) { estadoInventario = [IdObjeto "llave_dorada"] }
+      guardarPartida rutaTemp est0
+      resultadoCarga <- cargarPartida rutaTemp est0
+      existe <- doesFileExist rutaTemp
+      if existe then removeFile rutaTemp else return ()
+      case resultadoCarga of
+        Left err -> assertFailure ("Falló la carga válida: " ++ err)
+        Right estCargado -> do
+          assertEqual "Sala actual recuperada" (estadoSalaActual est0) (estadoSalaActual estCargado)
+          assertEqual "Inventario recuperado" (estadoInventario est0) (estadoInventario estCargado)
+          assertEqual "Título del mundo coincide"
+            (mundoTitulo (estadoMundo est0))
+            (mundoTitulo (estadoMundo estCargado))
+
+  , TestLabel "cargar partida de archivo inexistente retorna Left" $ TestCase $ do
+      let rutaInexistente = "archivo_que_no_existe_12345.sav"
+          est0 = estadoInicial mockMundo
+      resultadoCarga <- cargarPartida rutaInexistente est0
+      case resultadoCarga of
+        Left msg -> assertEqual "Mensaje indica inexistencia"
+          ("El archivo de guardado «" ++ rutaInexistente ++ "» no existe.") msg
+        Right _ -> assertFailure "Se cargó un archivo inexistente"
+
+  , TestLabel "cargar partida corrupta retorna Left" $ TestCase $ do
+      let rutaCorrupta = "test_guardado_corrupto.sav"
+          est0 = estadoInicial mockMundo
+      writeFile rutaCorrupta "ESTO NO ES UN ESTADO SERIALIZADO VALIDO :("
+      resultadoCarga <- cargarPartida rutaCorrupta est0
+      existe <- doesFileExist rutaCorrupta
+      if existe then removeFile rutaCorrupta else return ()
+      case resultadoCarga of
+        Left msg -> assertEqual "Mensaje indica archivo corrupto"
+          ("El archivo «" ++ rutaCorrupta ++ "» está corrupto o no tiene un formato válido de partida guardada.") msg
+        Right _ -> assertFailure "Se cargó una partida con contenido corrupto"
+
+  , TestLabel "cargar partida de mundo distinto retorna Left (Decisión D7)" $ TestCase $ do
+      let rutaDistinto = "test_guardado_distinto.sav"
+          mundoA = mockMundo { mundoTitulo = "Mundo Fantasía" }
+          mundoB = mockMundo { mundoTitulo = "Mundo Ciencia Ficción" }
+          estA = estadoInicial mundoA
+          estB = estadoInicial mundoB
+      guardarPartida rutaDistinto estA
+      resultadoCarga <- cargarPartida rutaDistinto estB
+      existe <- doesFileExist rutaDistinto
+      if existe then removeFile rutaDistinto else return ()
+      case resultadoCarga of
+        Left msg -> assertEqual "Mensaje advierte incompatibilidad de títulos de mundo"
+          ("La partida guardada pertenece al mundo «Mundo Fantasía», pero la partida actual es del mundo «Mundo Ciencia Ficción».") msg
+        Right _ -> assertFailure "Se permitió cargar una partida perteneciente a otro mundo"
+
+  , TestLabel "leerArchivoMundo carga archivo existente" $ TestCase $ do
+      res <- leerArchivoMundo "mundos/entrega.txt"
+      case res of
+        Left errs -> assertFailure ("Error al leer mundo de entrega: " ++ show errs)
+        Right m -> assertEqual "Título del mundo leído" "Entrega a última hora" (mundoTitulo m)
+
+  , TestLabel "leerArchivoMundo reporta error con archivo inexistente" $ TestCase $ do
+      res <- leerArchivoMundo "mundos/no_existe_987.txt"
+      case res of
+        Left errs -> assertEqual "Reporta error de archivo inexistente" 1 (length errs)
+        Right _ -> assertFailure "Se leyó un archivo que no existe"
+  ]
+
 main :: IO ()
 main = do
   resultado <- runTestTT (TestList
@@ -353,6 +422,7 @@ main = do
     , testsReconocedor
     , testsMundos
     , testsNucleo
+    , testsPersistencia
     ])
   if errors resultado + failures resultado == 0
     then return ()
