@@ -167,8 +167,9 @@ data ErrorMundo
 mostrarErrorMundo :: ErrorMundo -> String
 mostrarErrorMundo err = "Error: " ++ detalle err
   where
-    detalle (ErrorSintaxis linea msg) =
-      "línea " ++ show linea ++ ": " ++ msg
+    detalle (ErrorSintaxis linea msg)
+      | linea > 0 = "línea " ++ show linea ++ ": " ++ msg
+      | otherwise = msg
     detalle (ErrorIdDuplicado tipo idNom) =
       "identificador de " ++ tipo ++ " duplicado: «" ++ idNom ++ "»"
     detalle (ErrorSalidaInexistente (IdSala origen) dir (IdSala dest)) =

@@ -44,6 +44,9 @@ main = do
   case args of
     ["-validar", ruta] -> modoValidar ruta
     [ruta, "-validar"] -> modoValidar ruta
+    ["-validar"]       -> do
+      hPutStrLn stderr "Uso: aventura [-validar] ARCHIVO_MUNDO"
+      exitWith (ExitFailure 1)
     [ruta]             -> modoJuego ruta
     _                  -> do
       hPutStrLn stderr "Uso: aventura [-validar] ARCHIVO_MUNDO"
