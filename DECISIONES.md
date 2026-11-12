@@ -1,3 +1,31 @@
+## D1. Representación del mundo e identificadores
+
+Stefano Casale.
+
+**Contexto.** El motor maneja identificadores para salas y objetos, además de colecciones para modelar el mapa, las conexiones y los inventarios. Se requería evitar confusiones entre nombres de entidades en el código y asegurar búsquedas eficientes en tiempo de ejecución.
+
+**Opciones.**
+1. Usar `String` puro o sinónimos de tipo (`type IdSala = String`) junto con listas asociativas `[(String, a)]`.
+2. Definir tipos nuevos envoltorios (`newtype IdSala = IdSala String`, `newtype IdObjeto = IdObjeto String`) y almacenar las salas y objetos en mapas asociativos balanceados (`Data.Map.Strict`).
+
+**Decisión.** Adoptamos `newtype` para `IdSala` e `IdObjeto`, y `Data.Map.Strict` para las colecciones `mundoSalas`, `mundoObjetos` y `salaSalidas`. El sistema de tipos de Haskell previene que un identificador de objeto se use donde se espera una sala (o viceversa) en tiempo de compilación. Las búsquedas y actualizaciones se realizan en tiempo $O(\log n)$ en lugar del $O(n)$ de las listas.
+
+**Consecuencias.** El código gana seguridad estática y legibilidad. La unicidad de identificadores queda respaldada por la estructura de `Map`. Como contraparte, se requiere desempaquetar o envolver los identificadores al interactuar con el reconocedor léxico o formatear texto para el usuario.
+
+## D2. Qué guarda el Estado y modificaciones puras
+
+Stefano Casale.
+
+**Contexto.** Durante la partida, el jugador se traslada, toma o suelta objetos, combina recetas y desbloquea salidas. El motor debía registrar estas mutaciones de forma estrictamente funcional y pura.
+
+**Opciones.**
+1. Almacenar en el estado únicamente un registro de modificaciones ("delta"): una lista de objetos tomados, posiciones actuales de ítems y un conjunto de puertas desbloqueadas sobre un `Mundo` estático global.
+2. Incorporar el `Mundo` completo dentro del registro `Estado` (`estadoMundo :: Mundo`), modificando directamente las salas, inventarios y salidas en cada turno.
+
+**Decisión.** Mantener el `Mundo` completo dentro de `Estado` como una estructura inmutable que evoluciona funcionalmente turno a turno.
+
+**Consecuencias.** Se simplifica la función `ejecutar`, pues no requiere reconstruir dinámicamente la vista del mundo en cada consulta. Gracias al intercambio estructural (*structural sharing*) de los árboles de `Data.Map`, actualizar una sala o transferir un objeto solo reasigna las ramas del árbol involucradas ($O(\log n)$), sin duplicar el resto de la memoria del mapa. Guardar o restaurar la partida consiste en serializar directamente el `Estado`.
+
 ## D3. Reconocedor y números de línea
 
 Nazareth Colmenares.
@@ -58,3 +86,31 @@ nuevos. Las recetas con referencias inexistentes se reportan por separado.
 **Consecuencias.** V10 puede reconocer cadenas de recetas. La comprobación
 es aproximada porque no simula el consumo de ingredientes ni el orden de
 las acciones durante una partida.
+
+## D6. Formas de comandos aceptadas en el motor
+
+Stefano Casale.
+
+**Contexto.** La especificación básica exige comandos como `ir <dirección>`, `tomar <objeto>`, `mirar`, etc. Sin embargo, los guiones de prueba automatizados suministrados (como `guiones/entrega.txt`) envían direcciones cardinales desnudas (`norte`, `oeste`, `arriba`), y los usuarios tienden a emplear mayúsculas, artículos determinados o abreviaturas comunes.
+
+**Opciones.**
+1. Aceptar únicamente la sintaxis literal estricta de la tabla del enunciado (`ir norte`, `tomar carnet`).
+2. Implementar un analizador flexible y tolerante que normalice mayúsculas, admita direcciones directas, descarte artículos en español y soporte sinónimos habituales de aventuras conversacionales.
+
+**Decisión.** `Motor.Comandos.leerComando` convierte la entrada a minúsculas, permite direcciones directas sin el prefijo `ir` (`norte`, `oeste`, `arriba`, `n`, `s`), filtra artículos opcionales (`el`, `la`, `los`, `las`) en comandos con objeto (`tomar la llave_dorada`), y admite sinónimos frecuentes (`coger` por `tomar`, `dejar` por `soltar`, `inv`/`i` por `inventario`, `x` por `examinar` y `q` por `salir`).
+
+**Consecuencias.** El motor supera sin fricción los guiones oficiales y ofrece una interacción cómoda sin comprometer la pureza del analizador. Se añade una capa ligera de filtrado previo de palabras antes de la correspondencia por patrones.
+
+## D8. Comportamiento de salidas bloqueadas
+
+Stefano Casale.
+
+**Contexto.** Una sala puede declarar una salida con `requiere <objeto>`. El enunciado indica que el jugador solo puede cruzarla si porta dicho objeto, pero deja abierta la semántica posterior: si la cerradura vuelve a trabarse en cruces sucesivos o si queda permanentemente abierta.
+
+**Opciones.**
+1. Requerir el objeto en cada tránsito (cerradura con pestillo automático). Si el jugador deja la llave en la sala contigua, no podría volver.
+2. Desbloquear la puerta de manera permanente tras el primer tránsito exitoso portando la llave.
+
+**Decisión.** Desbloqueo permanente. En `Motor.Nucleo.ejecutarIr`, cuando el jugador cruza una salida bloqueada portando el requisito en su inventario, la salida se transforma a `Salida destino Nothing` dentro de la sala en `estadoMundo`.
+
+**Consecuencias.** El jugador puede explorar libremente la nueva zona e incluso soltar la llave sin riesgo de quedar atrapado o requerir retrocesos artificiales. Modela fielmente la experiencia clásica de los juegos de mazmorras y aventuras conversacionales.
