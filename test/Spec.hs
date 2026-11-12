@@ -117,7 +117,7 @@ testsMundos = TestList
   , mundoInvalido "mundos/invalidos/sintaxis.txt" 2
   , mundoInvalido "mundos/invalidos/referencias.txt" 5
   , mundoInvalido "mundos/invalidos/receta.txt" 4
-  , mundoInvalido "../material/mundos/invalido_semantica.txt" 9
+  , mundoInvalido "mundos/invalidos/invalido_semantica.txt" 9
   ]
 
 mundoInvalido :: FilePath -> Int -> Test
