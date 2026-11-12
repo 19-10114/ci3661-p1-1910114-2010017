@@ -101,6 +101,31 @@ Stefano Casale.
 
 **Consecuencias.** El motor supera sin fricción los guiones oficiales y ofrece una interacción cómoda sin comprometer la pureza del analizador. Se añade una capa ligera de filtrado previo de palabras antes de la correspondencia por patrones.
 
+## D7. Formato y compatibilidad de las partidas guardadas
+
+Nazareth Colmenares.
+
+**Contexto.** Una partida guardada debe permitir que el jugador retome el
+juego desde el estado que tenía al guardarla. Al cargarla, el juego también
+debe informar si el archivo falta, si su contenido es inválido o si
+corresponde a otro mundo.
+
+**Opciones.** Podíamos diseñar un formato de texto propio y escribir su
+lector, o guardar el estado completo con `Show` y recuperarlo con `readMaybe`.
+
+**Decisión.** En `Motor.Persistencia`, `guardarPartida` crea un valor
+`PartidaGuardada` con el título del mundo y el estado completo. Lo convierte
+a texto con `show` y lo escribe en UTF-8. Al cargar, `cargarPartida` usa
+`readMaybe` y compara el título guardado con el del mundo actual. Devuelve
+el estado recuperado si los títulos coinciden, o un mensaje de error si
+falla la lectura, el formato es inválido o los títulos difieren.
+
+**Consecuencias.** Reutilizamos las representaciones de Haskell para
+recuperar el estado sin mantener un lector propio. Si cambia la
+representación de los datos, algunas partidas antiguas podrían dejar de
+cargar. La comparación por título también permite que dos mundos distintos
+con el mismo título se consideren compatibles.
+
 ## D8. Comportamiento de salidas bloqueadas
 
 Stefano Casale.
